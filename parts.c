@@ -56,7 +56,7 @@ int diskinfo(int argc, char* argv[]) {
     printf("arg: %s\n", argv[1]);
 
     int fd;
-    char *data;
+    char* data;
 
     fd = open(argv[1], O_RDWR);
 
@@ -68,11 +68,31 @@ int diskinfo(int argc, char* argv[]) {
     data = mmap(NULL, 0x100, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
 
     printf("%p\n", data);
-    printf("%c\n", data[0]);
-    printf("%c\n", data[1]);
+    struct superblock_t block = {};
+    memcpy(&block, data, 30);
+
+    // HEX OK OR NOT?
+    printf(
+        "Super block information\n"
+        "Block size: %x\n"
+        "Block count: %x\n"
+        "FAT starts: %x\n"
+        "FAT blocks: %x\n"
+        "Root directory starts: %x\n"
+        "Root directory blocks: %x\n"
+        "FAT information\n"
+        "Free blocks: d\n"
+        "Reserved blocks: d\n"
+        "Allocated blocks: d\n",
+        block.block_size,
+        block.file_system_block_count,
+        block.fat_start_block,
+        block.fat_block_count,
+        block.root_dir_start_block,
+        block.root_dir_block_count
+    );
 
     close(fd);
-
 
     return 0;
 }
