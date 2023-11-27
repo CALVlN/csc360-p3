@@ -54,21 +54,34 @@ struct __attribute__((__packed__)) dir_entry_t {
     uint8_t even_more_unused;
 };
 
+int getFileSize(const int fd) {
+    struct stat fileStats;
+    int err = fstat(fd, &fileStats);
+    if (err != 0) {
+        perror("Error getting file stats");
+        exit(1);
+    }
+
+    return fileStats.st_size;
+}
+
+uint32_t getNextFourBytes(char** ptr) {
+    uint32_t buffer;
+    memcpy(&buffer, *ptr, 4);
+    buffer = htonl(buffer);
+    *ptr += 4;
+    return buffer;
+}
+
 int diskinfo(int argc, char* argv[]) {
     int fd = open(argv[1], O_RDWR);
-    if (fd < 0) {
+    if (fd == -1) {
         printf("device not opened\n");
         exit(1);
     }
 
-    struct stat fileStats;
-    int err = fstat(fd, &fileStats);
-    if (err < 0) {
-        perror("Error getting file information\n");
-        exit(1);
-    }
-
-    char* dataPtr = mmap(NULL, fileStats.st_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+    int fileSize = getFileSize(fd);
+    char* dataPtr = mmap(NULL, fileSize, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
     if (dataPtr == MAP_FAILED) {
         perror("Error mapping file\n");
         exit(1);
@@ -82,20 +95,11 @@ int diskinfo(int argc, char* argv[]) {
     memcpy(&block.block_size, blockPtr, 2);
     block.block_size = htons(block.block_size);
     blockPtr += 2;
-    memcpy(&block.file_system_block_count, blockPtr, 4);
-    block.file_system_block_count = htonl(block.file_system_block_count);
-    blockPtr += 4;
-    memcpy(&block.fat_start_block, blockPtr, 4);
-    block.fat_start_block = htonl(block.fat_start_block);
-    blockPtr += 4;
-    memcpy(&block.fat_block_count, blockPtr, 4);
-    block.fat_block_count = htonl(block.fat_block_count);
-    blockPtr += 4;
-    memcpy(&block.root_dir_start_block, blockPtr, 4);
-    block.root_dir_start_block = htonl(block.root_dir_start_block);
-    blockPtr += 4;
-    memcpy(&block.root_dir_block_count, blockPtr, 4);
-    block.root_dir_block_count = htonl(block.root_dir_block_count);
+    block.file_system_block_count = getNextFourBytes(&blockPtr);
+    block.fat_start_block = getNextFourBytes(&blockPtr);
+    block.fat_block_count = getNextFourBytes(&blockPtr);
+    block.root_dir_start_block = getNextFourBytes(&blockPtr);
+    block.root_dir_block_count = getNextFourBytes(&blockPtr);
 
     char* fatEntryData = dataPtr + block.fat_start_block*block.block_size;
     int freeFatBlocks = 0;
@@ -139,6 +143,8 @@ int diskinfo(int argc, char* argv[]) {
         reservedFatBlocks,
         allocatedFatBlocks
     );
+
+    munmap(dataPtr, fileSize);
 
     close(fd);
 
